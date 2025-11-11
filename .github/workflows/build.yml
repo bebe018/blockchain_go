@@ -25,9 +25,17 @@ jobs:
       - name: Build
         run: go build -v ./...
 
-
       - name: Test
         run: go test -v ./...
+      
+      - name: docker login
+        uses: docker/login-action@v3
+        with: 
+          username: ${{  secrets.DOCKER_HUB_USERNAME }}
+          password: ${{  secrets.DOCKER_HUB_TOKEN }}
+      - name: push to docker hub
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: bebe018/blockchain_go:latest
 
-      - name: Build Docker image
-        run: docker build -t my-blockchain .
