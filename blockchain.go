@@ -71,7 +71,7 @@ func CreateBlockchain(address, nodeID string) *Blockchain {
 // NewBlockchain creates a new Blockchain with genesis Block
 func NewBlockchain(nodeID string) *Blockchain {
 	dbFile := fmt.Sprintf(dbFile, nodeID)
-	if dbExists(dbFile) == false {
+	if !dbExists(dbFile) {
 		fmt.Println("No existing blockchain found. Create one first.")
 		os.Exit(1)
 	}
@@ -105,6 +105,22 @@ func (bc *Blockchain) AddBlock(block *Block) {
 
 		if blockInDb != nil {
 			return nil
+		}
+		// Adding PoW to a block for validating
+		pow := NewProofOfWork(block)
+		if !pow.Validate() {
+			return fmt.Errorf("invalid proof of work for block %x", block.Hash)
+		}
+		if len(block.PrevBlockHash) > 0 {
+			prevBlockData := b.Get(block.PrevBlockHash)
+			if prevBlockData == nil {
+				return fmt.Errorf("previous block %x not found for block %x", block.PrevBlockHash, block.Hash)
+			}
+		}
+		for _, tx := range block.Transactions {
+			if !bc.VerifyTransaction(tx) {
+				return fmt.Errorf("invalid transaction %x found in block %x", tx.ID, block.Hash)
+			}
 		}
 
 		blockData := block.Serialize()
@@ -140,7 +156,7 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 		block := bci.Next()
 
 		for _, tx := range block.Transactions {
-			if bytes.Compare(tx.ID, ID) == 0 {
+			if bytes.Equal(tx.ID, ID) {
 				return *tx, nil
 			}
 		}
@@ -181,7 +197,7 @@ func (bc *Blockchain) FindUTXO() map[string]TXOutputs {
 				UTXO[txID] = outs
 			}
 
-			if tx.IsCoinbase() == false {
+			if !tx.IsCoinbase() {
 				for _, in := range tx.Vin {
 					inTxID := hex.EncodeToString(in.Txid)
 					spentTXOs[inTxID] = append(spentTXOs[inTxID], in.Vout)
@@ -233,7 +249,7 @@ func (bc *Blockchain) GetBlock(blockHash []byte) (Block, error) {
 		blockData := b.Get(blockHash)
 
 		if blockData == nil {
-			return errors.New("Block is not found.")
+			return errors.New("block is not found")
 		}
 
 		block = *DeserializeBlock(blockData)
@@ -272,7 +288,7 @@ func (bc *Blockchain) MineBlock(transactions []*Transaction) *Block {
 
 	for _, tx := range transactions {
 		// TODO: ignore transaction if it's not valid
-		if bc.VerifyTransaction(tx) != true {
+		if !bc.VerifyTransaction(tx) {
 			log.Panic("ERROR: Invalid transaction")
 		}
 	}

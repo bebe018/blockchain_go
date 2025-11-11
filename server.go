@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 )
@@ -76,7 +75,7 @@ func bytesToCommand(bytes []byte) string {
 		}
 	}
 
-	return fmt.Sprintf("%s", command)
+	return string(command)
 }
 
 func extractCommand(request []byte) []byte {
@@ -211,7 +210,7 @@ func handleBlock(request []byte, bc *Blockchain) {
 		blocksInTransit = blocksInTransit[1:]
 	} else {
 		UTXOSet := UTXOSet{bc}
-		UTXOSet.Reindex()
+		UTXOSet.Update(block) // use UTXOSet.Update(*Block) instead of UTXOSet.Reindex() to increase perforamance
 	}
 }
 
@@ -236,7 +235,7 @@ func handleInv(request []byte, bc *Blockchain) {
 
 		newInTransit := [][]byte{}
 		for _, b := range blocksInTransit {
-			if bytes.Compare(b, blockHash) != 0 {
+			if bytes.Equal(b, blockHash) {
 				newInTransit = append(newInTransit, b)
 			}
 		}
@@ -319,43 +318,40 @@ func handleTx(request []byte, bc *Blockchain) {
 		}
 	} else {
 		if len(mempool) >= 2 && len(miningAddress) > 0 {
-		MineTransactions:
-			var txs []*Transaction
+			for len(mempool) > 0 { // increase maintainability by using a for { ... } loop to substitute the goto statement.
+				var txs []*Transaction
 
-			for id := range mempool {
-				tx := mempool[id]
-				if bc.VerifyTransaction(&tx) {
-					txs = append(txs, &tx)
+				for id := range mempool {
+					tx := mempool[id]
+					if bc.VerifyTransaction(&tx) {
+						txs = append(txs, &tx)
+					}
 				}
-			}
 
-			if len(txs) == 0 {
-				fmt.Println("All transactions are invalid! Waiting for new ones...")
-				return
-			}
-
-			cbTx := NewCoinbaseTX(miningAddress, "")
-			txs = append(txs, cbTx)
-
-			newBlock := bc.MineBlock(txs)
-			UTXOSet := UTXOSet{bc}
-			UTXOSet.Reindex()
-
-			fmt.Println("New block is mined!")
-
-			for _, tx := range txs {
-				txID := hex.EncodeToString(tx.ID)
-				delete(mempool, txID)
-			}
-
-			for _, node := range knownNodes {
-				if node != nodeAddress {
-					sendInv(node, "block", [][]byte{newBlock.Hash})
+				if len(txs) == 0 {
+					fmt.Println("All transactions are invalid! Waiting for new ones...")
+					return
 				}
-			}
 
-			if len(mempool) > 0 {
-				goto MineTransactions
+				cbTx := NewCoinbaseTX(miningAddress, "")
+				txs = append(txs, cbTx)
+
+				newBlock := bc.MineBlock(txs)
+				UTXOSet := UTXOSet{bc}
+				UTXOSet.Update(newBlock) // use UTXOSet.Update(*Block) instead of UTXOSet.Reindex() to increase perforamance
+
+				fmt.Println("New block is mined!")
+
+				for _, tx := range txs {
+					txID := hex.EncodeToString(tx.ID)
+					delete(mempool, txID)
+				}
+
+				for _, node := range knownNodes {
+					if node != nodeAddress {
+						sendInv(node, "block", [][]byte{newBlock.Hash})
+					}
+				}
 			}
 		}
 	}
@@ -388,7 +384,7 @@ func handleVersion(request []byte, bc *Blockchain) {
 }
 
 func handleConnection(conn net.Conn, bc *Blockchain) {
-	request, err := ioutil.ReadAll(conn)
+	request, err := io.ReadAll(conn) // use io.ReadAll to replace the ioutil.ReadAll since ioutil package has been deprecated
 	if err != nil {
 		log.Panic(err)
 	}

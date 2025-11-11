@@ -119,7 +119,7 @@ func (u UTXOSet) Reindex() {
 
 	UTXO := u.Blockchain.FindUTXO()
 
-	err = db.Update(func(tx *bolt.Tx) error {
+	_ = db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketName)
 
 		for txID, outs := range UTXO {
@@ -147,7 +147,7 @@ func (u UTXOSet) Update(block *Block) {
 		b := tx.Bucket([]byte(utxoBucket))
 
 		for _, tx := range block.Transactions {
-			if tx.IsCoinbase() == false {
+			if !tx.IsCoinbase() {
 				for _, vin := range tx.Vin {
 					updatedOuts := TXOutputs{}
 					outsBytes := b.Get(vin.Txid)
@@ -175,9 +175,7 @@ func (u UTXOSet) Update(block *Block) {
 			}
 
 			newOutputs := TXOutputs{}
-			for _, out := range tx.Vout {
-				newOutputs.Outputs = append(newOutputs.Outputs, out)
-			}
+			newOutputs.Outputs = append(newOutputs.Outputs, tx.Vout...)
 
 			err := b.Put(tx.ID, newOutputs.Serialize())
 			if err != nil {
