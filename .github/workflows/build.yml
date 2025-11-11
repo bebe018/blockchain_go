@@ -37,5 +37,5 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: true
-          tags: bebe018/blockchain_go
+          tags: bebe0618/blockchain_go
 
