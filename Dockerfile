@@ -8,5 +8,4 @@ WORKDIR /root
 ENV NODE_ID=3000
 COPY --from=builder /app/blockchain .
 
-# 讓 container 一直活著（PID 1 是 tail）
 ENTRYPOINT ["sh", "-c", "tail -f /dev/null"]
