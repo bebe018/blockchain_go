@@ -29,27 +29,27 @@ func main() {
 	for {
 		select {
 		case event := <-eventCh:
-			fmt.Printf("📢 主程式監聽到事件: 命令 [%s], 成功: %t, 訊息: %s\n", event.Command, event.Success, event.Message)
+			fmt.Printf("main function receives event: command [%s], success: %t, message: %s\n", event.Command, event.Success, event.Message)
 			if event.Command == "quit" || event.Command == "exit" {
 				goto Shutdown
 			}
 
 		case err := <-metricsErrCh:
-			fmt.Printf("❌ 嚴重錯誤：Metrics Server 運行失敗: %v\n", err)
+			fmt.Printf("Metrics processing error: %v\n", err)
 			goto Shutdown
 
 		case sig := <-osSignalCh:
-			fmt.Printf("\n🚨 收到操作系統信號 (%v)，準備執行優雅關閉。\n", sig)
+			fmt.Println("Receive signal inter\n", sig)
 			goto Shutdown
 		}
 	}
 
 Shutdown:
-	fmt.Println("--- 執行優雅關閉程序 ---")
+	fmt.Println("--- Graceful shutdown executing ---")
 
 	if err := metricsManager.GracefulShutdownMetricsServer(context.Background()); err != nil {
-		fmt.Printf("❌ 關閉 Metrics Server 失敗: %v\n", err)
+		fmt.Printf("Shutdown Metrics Server fail: %v\n", err)
 	}
 
-	fmt.Println("👋 程式已終止。")
+	fmt.Println("function has been terminated")
 }

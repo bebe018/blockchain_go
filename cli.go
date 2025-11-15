@@ -32,7 +32,7 @@ func (cli *CLI) StartListener() <-chan *CommandEvent {
 			fmt.Print("> ")
 			input, err := reader.ReadString('\n')
 			if err != nil {
-				log.Printf("讀取輸入錯誤: %v", err)
+				log.Printf("Error occurs when reading signal: %v", err)
 				break
 			}
 
@@ -46,7 +46,7 @@ func (cli *CLI) StartListener() <-chan *CommandEvent {
 				eventCh <- event
 
 				if event.Command == "quit" || event.Command == "exit" {
-					fmt.Println("監聽器準備退出...")
+					fmt.Println("Server listener is ready to quit...")
 					break
 				}
 			}
@@ -83,10 +83,9 @@ func (cli *CLI) processCommand(input string) *CommandEvent {
 	}
 
 	if cmd == "quit" || cmd == "exit" {
-		return &CommandEvent{Command: cmd, Success: true, Message: "退出信號"}
+		return &CommandEvent{Command: cmd, Success: true, Message: "quit sugnal"}
 	}
 
-	// 根據命令創建 FlagSet 並定義參數
 	switch cmd {
 	case "createblockchain":
 		fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
@@ -94,15 +93,15 @@ func (cli *CLI) processCommand(input string) *CommandEvent {
 		address := fs.String("address", "", "The address to send genesis block reward to")
 
 		if err := fs.Parse(cmdArgs); err != nil {
-			return &CommandEvent{Command: cmd, Success: false, Message: fmt.Sprintf("解析參數錯誤: %v", err)}
+			return &CommandEvent{Command: cmd, Success: false, Message: fmt.Sprintf("Error occurs when parsing parameters: %v", err)}
 		}
 
 		if *address == "" {
-			return &CommandEvent{Command: cmd, Success: false, Message: "錯誤：'address' 參數是必需的。"}
+			return &CommandEvent{Command: cmd, Success: false, Message: "error：'address' parameters are needed"}
 		}
 
 		cli.createBlockchain(*address, nodeID)
-		return &CommandEvent{Command: cmd, Success: true, Message: "✅ 區塊鏈創建成功！"}
+		return &CommandEvent{Command: cmd, Success: true, Message: "Blockchain created successfully"}
 
 	case "getbalance":
 		fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
@@ -110,15 +109,15 @@ func (cli *CLI) processCommand(input string) *CommandEvent {
 		address := fs.String("address", "", "The address to get balance for")
 
 		if err := fs.Parse(cmdArgs); err != nil {
-			return &CommandEvent{Command: cmd, Success: false, Message: fmt.Sprintf("解析參數錯誤: %v", err)}
+			return &CommandEvent{Command: cmd, Success: false, Message: fmt.Sprintf("Error occurs when parsing parameters: %v", err)}
 		}
 
 		if *address == "" {
-			return &CommandEvent{Command: cmd, Success: false, Message: "錯誤：'address' 參數是必需的。"}
+			return &CommandEvent{Command: cmd, Success: false, Message: "error:'address' parameters are needed"}
 		}
 
 		cli.getBalance(*address, nodeID)
-		return &CommandEvent{Command: cmd, Success: true, Message: "✅ 餘額查詢完成。"}
+		return &CommandEvent{Command: cmd, Success: true, Message: "Get balance successfully"}
 
 	case "send":
 		fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
@@ -129,34 +128,34 @@ func (cli *CLI) processCommand(input string) *CommandEvent {
 		mine := fs.Bool("mine", false, "Mine immediately on the same node")
 
 		if err := fs.Parse(cmdArgs); err != nil {
-			return &CommandEvent{Command: cmd, Success: false, Message: fmt.Sprintf("解析參數錯誤: %v", err)}
+			return &CommandEvent{Command: cmd, Success: false, Message: fmt.Sprintf("Error occurs when parsing parameters: %v", err)}
 		}
 
 		if *from == "" || *to == "" || *amount <= 0 {
-			return &CommandEvent{Command: cmd, Success: false, Message: "錯誤：'from', 'to' 和 'amount' 參數是必需的，且 amount 必須大於 0。"}
+			return &CommandEvent{Command: cmd, Success: false, Message: "error:'from', 'to' and 'amount' parameters are needed and amout must larger than 0"}
 		}
 
 		cli.send(*from, *to, *amount, nodeID, *mine)
-		return &CommandEvent{Command: cmd, Success: true, Message: fmt.Sprintf("✅ 交易發送成功: %d 單位從 %s 到 %s (挖礦: %t)。", *amount, *from, *to, *mine)}
+		return &CommandEvent{Command: cmd, Success: true, Message: fmt.Sprintf("Transaction sent successfully: %d units from %s to %s (Mining: %t).", *amount, *from, *to, *mine)}
 
 	case "createwallet":
 		cli.createWallet(nodeID)
-		return &CommandEvent{Command: cmd, Success: true, Message: "✅ 錢包創建完成。"}
+		return &CommandEvent{Command: cmd, Success: true, Message: "Wallet created successfully"}
 
 	case "listaddresses":
 		cli.listAddresses(nodeID)
-		return &CommandEvent{Command: cmd, Success: true, Message: "✅ 地址列表已印出。"}
+		return &CommandEvent{Command: cmd, Success: true, Message: "List of address has been printed successfully"}
 
 	case "printchain":
 		cli.printChain(nodeID)
-		return &CommandEvent{Command: cmd, Success: true, Message: "✅ 區塊鏈已印出。"}
+		return &CommandEvent{Command: cmd, Success: true, Message: "Blockchain has been printed successfully"}
 
 	case "reindexutxo":
 		cli.reindexUTXO(nodeID)
-		return &CommandEvent{Command: cmd, Success: true, Message: "✅ UTXO 索引重建完成。"}
+		return &CommandEvent{Command: cmd, Success: true, Message: "UTXO reindex successfully"}
 
 	default:
 		cli.printUsage()
-		return &CommandEvent{Command: cmd, Success: false, Message: fmt.Sprintf("未知命令: %s", cmd)}
+		return &CommandEvent{Command: cmd, Success: false, Message: fmt.Sprintf("Unknown conmmand %s", cmd)}
 	}
 }
