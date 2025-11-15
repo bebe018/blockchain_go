@@ -329,7 +329,8 @@ func (bc *Blockchain) MineBlock(transactions []*Transaction) *Block {
 	if err != nil {
 		log.Panic(err)
 	}
-
+	blocksMined.Inc()
+	chainHeight.Set(float64(newBlock.Height))
 	return newBlock
 }
 

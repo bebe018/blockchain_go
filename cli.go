@@ -1,15 +1,60 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"log"
-
 	"os"
+	"strings"
 )
 
-// CLI responsible for processing command line arguments
-type CLI struct{}
+type CommandEvent struct {
+	Command string
+	Success bool
+	Message string
+}
+
+type CLI struct {
+}
+
+func (cli *CLI) StartListener() <-chan *CommandEvent {
+	eventCh := make(chan *CommandEvent)
+
+	go func() {
+		defer close(eventCh)
+
+		reader := bufio.NewReader(os.Stdin)
+
+		cli.printUsage()
+
+		for {
+			fmt.Print("> ")
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				log.Printf("讀取輸入錯誤: %v", err)
+				break
+			}
+
+			input = strings.TrimSpace(input)
+			if input == "" {
+				continue
+			}
+
+			event := cli.processCommand(input)
+			if event != nil {
+				eventCh <- event
+
+				if event.Command == "quit" || event.Command == "exit" {
+					fmt.Println("監聽器準備退出...")
+					break
+				}
+			}
+		}
+	}()
+
+	return eventCh
+}
 
 func (cli *CLI) printUsage() {
 	fmt.Println("Usage:")
@@ -23,133 +68,95 @@ func (cli *CLI) printUsage() {
 	fmt.Println("  startnode -miner ADDRESS - Start a node with ID specified in NODE_ID env. var. -miner enables mining")
 }
 
-func (cli *CLI) validateArgs() {
-	if len(os.Args) < 2 {
-		cli.printUsage()
-		os.Exit(1)
+func (cli *CLI) processCommand(input string) *CommandEvent {
+	args := strings.Fields(input)
+	if len(args) == 0 {
+		return nil
 	}
-}
 
-// Run parses command line arguments and processes commands
-func (cli *CLI) Run() {
-	cli.validateArgs()
-
+	cmd := args[0]
+	cmdArgs := args[1:]
 	nodeID := os.Getenv("NODE_ID")
+
 	if nodeID == "" {
-		fmt.Printf("NODE_ID env. var is not set!")
-		os.Exit(1)
+		return &CommandEvent{Command: cmd, Success: false, Message: "NODE_ID env. var is not set!"}
 	}
 
-	getBalanceCmd := flag.NewFlagSet("getbalance", flag.ExitOnError)
-	createBlockchainCmd := flag.NewFlagSet("createblockchain", flag.ExitOnError)
-	createWalletCmd := flag.NewFlagSet("createwallet", flag.ExitOnError)
-	listAddressesCmd := flag.NewFlagSet("listaddresses", flag.ExitOnError)
-	printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
-	reindexUTXOCmd := flag.NewFlagSet("reindexutxo", flag.ExitOnError)
-	sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
-	startNodeCmd := flag.NewFlagSet("startnode", flag.ExitOnError)
+	if cmd == "quit" || cmd == "exit" {
+		return &CommandEvent{Command: cmd, Success: true, Message: "退出信號"}
+	}
 
-	getBalanceAddress := getBalanceCmd.String("address", "", "The address to get balance for")
-	createBlockchainAddress := createBlockchainCmd.String("address", "", "The address to send genesis block reward to")
-	sendFrom := sendCmd.String("from", "", "Source wallet address")
-	sendTo := sendCmd.String("to", "", "Destination wallet address")
-	sendAmount := sendCmd.Int("amount", 0, "Amount to send")
-	sendMine := sendCmd.Bool("mine", false, "Mine immediately on the same node")
-	startNodeMiner := startNodeCmd.String("miner", "", "Enable mining mode and send reward to ADDRESS")
-
-	switch os.Args[1] {
-	case "getbalance":
-		err := getBalanceCmd.Parse(os.Args[2:])
-		if err != nil {
-			log.Panic(err)
-		}
+	// 根據命令創建 FlagSet 並定義參數
+	switch cmd {
 	case "createblockchain":
-		err := createBlockchainCmd.Parse(os.Args[2:])
-		if err != nil {
-			log.Panic(err)
+		fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
+		fs.SetOutput(os.Stdout)
+		address := fs.String("address", "", "The address to send genesis block reward to")
+
+		if err := fs.Parse(cmdArgs); err != nil {
+			return &CommandEvent{Command: cmd, Success: false, Message: fmt.Sprintf("解析參數錯誤: %v", err)}
 		}
-	case "createwallet":
-		err := createWalletCmd.Parse(os.Args[2:])
-		if err != nil {
-			log.Panic(err)
+
+		if *address == "" {
+			return &CommandEvent{Command: cmd, Success: false, Message: "錯誤：'address' 參數是必需的。"}
 		}
-	case "listaddresses":
-		err := listAddressesCmd.Parse(os.Args[2:])
-		if err != nil {
-			log.Panic(err)
+
+		cli.createBlockchain(*address, nodeID)
+		return &CommandEvent{Command: cmd, Success: true, Message: "✅ 區塊鏈創建成功！"}
+
+	case "getbalance":
+		fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
+		fs.SetOutput(os.Stdout)
+		address := fs.String("address", "", "The address to get balance for")
+
+		if err := fs.Parse(cmdArgs); err != nil {
+			return &CommandEvent{Command: cmd, Success: false, Message: fmt.Sprintf("解析參數錯誤: %v", err)}
 		}
-	case "printchain":
-		err := printChainCmd.Parse(os.Args[2:])
-		if err != nil {
-			log.Panic(err)
+
+		if *address == "" {
+			return &CommandEvent{Command: cmd, Success: false, Message: "錯誤：'address' 參數是必需的。"}
 		}
-	case "reindexutxo":
-		err := reindexUTXOCmd.Parse(os.Args[2:])
-		if err != nil {
-			log.Panic(err)
-		}
+
+		cli.getBalance(*address, nodeID)
+		return &CommandEvent{Command: cmd, Success: true, Message: "✅ 餘額查詢完成。"}
+
 	case "send":
-		err := sendCmd.Parse(os.Args[2:])
-		if err != nil {
-			log.Panic(err)
+		fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
+		fs.SetOutput(os.Stdout)
+		from := fs.String("from", "", "Source wallet address")
+		to := fs.String("to", "", "Destination wallet address")
+		amount := fs.Int("amount", 0, "Amount to send")
+		mine := fs.Bool("mine", false, "Mine immediately on the same node")
+
+		if err := fs.Parse(cmdArgs); err != nil {
+			return &CommandEvent{Command: cmd, Success: false, Message: fmt.Sprintf("解析參數錯誤: %v", err)}
 		}
-	case "startnode":
-		err := startNodeCmd.Parse(os.Args[2:])
-		if err != nil {
-			log.Panic(err)
+
+		if *from == "" || *to == "" || *amount <= 0 {
+			return &CommandEvent{Command: cmd, Success: false, Message: "錯誤：'from', 'to' 和 'amount' 參數是必需的，且 amount 必須大於 0。"}
 		}
+
+		cli.send(*from, *to, *amount, nodeID, *mine)
+		return &CommandEvent{Command: cmd, Success: true, Message: fmt.Sprintf("✅ 交易發送成功: %d 單位從 %s 到 %s (挖礦: %t)。", *amount, *from, *to, *mine)}
+
+	case "createwallet":
+		cli.createWallet(nodeID)
+		return &CommandEvent{Command: cmd, Success: true, Message: "✅ 錢包創建完成。"}
+
+	case "listaddresses":
+		cli.listAddresses(nodeID)
+		return &CommandEvent{Command: cmd, Success: true, Message: "✅ 地址列表已印出。"}
+
+	case "printchain":
+		cli.printChain(nodeID)
+		return &CommandEvent{Command: cmd, Success: true, Message: "✅ 區塊鏈已印出。"}
+
+	case "reindexutxo":
+		cli.reindexUTXO(nodeID)
+		return &CommandEvent{Command: cmd, Success: true, Message: "✅ UTXO 索引重建完成。"}
+
 	default:
 		cli.printUsage()
-		os.Exit(1)
-	}
-
-	if getBalanceCmd.Parsed() {
-		if *getBalanceAddress == "" {
-			getBalanceCmd.Usage()
-			os.Exit(1)
-		}
-		cli.getBalance(*getBalanceAddress, nodeID)
-	}
-
-	if createBlockchainCmd.Parsed() {
-		if *createBlockchainAddress == "" {
-			createBlockchainCmd.Usage()
-			os.Exit(1)
-		}
-		cli.createBlockchain(*createBlockchainAddress, nodeID)
-	}
-
-	if createWalletCmd.Parsed() {
-		cli.createWallet(nodeID)
-	}
-
-	if listAddressesCmd.Parsed() {
-		cli.listAddresses(nodeID)
-	}
-
-	if printChainCmd.Parsed() {
-		cli.printChain(nodeID)
-	}
-
-	if reindexUTXOCmd.Parsed() {
-		cli.reindexUTXO(nodeID)
-	}
-
-	if sendCmd.Parsed() {
-		if *sendFrom == "" || *sendTo == "" || *sendAmount <= 0 {
-			sendCmd.Usage()
-			os.Exit(1)
-		}
-
-		cli.send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
-	}
-
-	if startNodeCmd.Parsed() {
-		nodeID := os.Getenv("NODE_ID")
-		if nodeID == "" {
-			startNodeCmd.Usage()
-			os.Exit(1)
-		}
-		cli.startNode(nodeID, *startNodeMiner)
+		return &CommandEvent{Command: cmd, Success: false, Message: fmt.Sprintf("未知命令: %s", cmd)}
 	}
 }

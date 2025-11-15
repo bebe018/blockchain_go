@@ -7,5 +7,8 @@ FROM debian:bookworm-slim
 WORKDIR /root
 ENV NODE_ID=3000
 COPY --from=builder /app/blockchain .
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-ENTRYPOINT ["sh", "-c", "tail -f /dev/null"]
+EXPOSE 2112
+ENTRYPOINT ["sh", "-c", "./blockchain & tail -f /dev/null"]
+
